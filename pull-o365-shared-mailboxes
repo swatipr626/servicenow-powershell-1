@@ -1,0 +1,54 @@
+$MIDUser=$env:SNC_MIDUser;
+$MIDPassword=$env:SNC_MIDPassword;
+$SNOWUser=$env:SNC_SNOWUser;
+$SNOWPassword=$env:SNC_SNOWPassword;
+
+Get-PSSession | Remove-PSSession
+
+$username = $MIDUser
+$password = $MIDPassword | ConvertTo-SecureString -asPlainText -Force
+$Ocred = New-Object -typename System.Management.Automation.PSCredential -argumentlist $username,$password
+
+$Session = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://ps.outlook.com/powershell/ -Credential $Ocred -Authentication Basic -AllowRedirection -Verbose
+Import-PSSession $Session -AllowClobber
+
+# Username and Password that has rights to create records 
+$user = $SNOWUser
+$pass = $SNOWPassword
+
+# Build auth header
+$base64AuthInfo = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(("{0}:{1}" -f $user, $pass)))
+
+# Set proper headers
+$headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
+$headers.Add('Authorization',('Basic {0}' -f $base64AuthInfo))
+$headers.Add('Accept','application/json')
+$headers.Add('Content-Type','application/json')
+
+# Specify endpoint uri
+$uri = "https://redcrossaudev.service-now.com/api/aurc/shared_mailboxes"
+
+# Specify HTTP method
+$method = "POST"
+
+$Mailboxes =  Get-Mailbox -RecipientTypeDetails SharedMailbox -ResultSize Unlimited | select #identity,displayname,primarySmtpAddress,Alias | sort displayname
+
+##$Mailboxes = Get-Mailbox -RecipientTypeDetails SharedMailbox -ResultSize Unlimited | Where-Object {$_.WhenChanged -ge ((Get-Date).Adddays(-10))} | select identity,displayname,primarySmtpAddress,Alias,Owner | sort displayname
+
+foreach ($mailbox in $mailboxes) { $DisplayName = $mailbox.DisplayName; $Identity = $mailbox.Identity; $PrimarySMTPAddress = $mailbox.PrimarySmtpAddress;$Alias = $mailbox.Alias;
+$mname = Get-Mailbox -Identity $Identity | Get-User | select manager;
+$owner = get-user $mname.manager | select windowsemailaddress;
+$owneremail = $owner.WindowsEmailAddress;
+$body = "{'u_display_name':'$DisplayName','u_identity':'$Identity','u_primary_smtp_address':'$PrimarySMTPAddress','u_owner':'$owneremail','u_alias':'$Alias'}";
+if($owneremail -eq "null"){
+#Write-Output ("VF - " + $DisplayName + " has no owner: " + $owneremail);
+}
+else{
+$response = Invoke-WebRequest -Headers $headers -Method $method -Uri $uri -Body $body -UseBasicParsing;
+$response.RawContent;
+}
+}
+
+#Write-Output ("VF - " + $Mailboxes);
+
+Remove-PSSession $Session
