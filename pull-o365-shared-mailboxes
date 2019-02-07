@@ -26,7 +26,7 @@ $headers.Add('Accept','application/json')
 $headers.Add('Content-Type','application/json')
 
 # Specify endpoint uri
-$uri = "https://<your_instance>.service-now.com/api/aurc/shared_mailboxes"
+$uri = $InstanceURL + "/api/aurc/shared_mailboxes"
 
 # Specify HTTP method
 $method = "POST"
